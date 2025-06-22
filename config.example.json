@@ -1,0 +1,13 @@
+{
+  "color_scheme": {
+    "primary": "#fe640b",
+    "secondary": "#ffffff",
+    "accent": "#00ff00",
+    "success": "#00ff00",
+    "warning": "#ffa500",
+    "error": "#ff0000",
+    "text": "#ffffff",
+    "text_dim": "#808080"
+  },
+  "theme": "default"
+} 
