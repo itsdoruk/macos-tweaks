@@ -1,6 +1,6 @@
-use crate::app::App;
+use crate::app::{App, Tile};
 use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{
@@ -10,26 +10,33 @@ use ratatui::{
 };
 
 pub fn ui(f: &mut Frame, app: &mut App) {
+    if app.sokoban_game.is_some() {
+        render_sokoban_game(f, app);
+        return;
+    }
     if app.fullscreen_list.is_some() {
         render_fullscreen_list(f, app);
         return;
     }
     if let Some(output) = &app.fullscreen_output {
-        let text = format!("{}\n\n[ Press any key to return ]", output);
+        let text = format!("{}\n\n[ Press any key to return, ↑/↓ to scroll ]", output);
         let paragraph = Paragraph::new(text)
             .style(Style::default().fg(app.config.get_color_scheme().get_color("primary")))
             .alignment(Alignment::Left)
-            .wrap(Wrap { trim: true });
+            .wrap(Wrap { trim: true })
+            .scroll((app.fullscreen_output_scroll, 0));
         f.render_widget(paragraph, f.size());
         return;
     }
 
     app.update_status_timer();
 
-    let status_bar_height = if let Some(msg) = &app.status_message {
+    let status_bar_height = if app.text_input_prompt.is_some() {
+        4
+    } else if app.confirmation_message.is_some() {
+        4
+    } else if let Some(msg) = &app.status_message {
         msg.lines().count() as u16 + 1
-    } else if let Some(_) = &app.confirmation_message {
-        4 // Extra space for confirmation message
     } else {
         2
     };
@@ -50,8 +57,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
     let header = create_header(app);
     f.render_widget(header, chunks[0]);
 
-    let list = create_list(app);
-    f.render_widget(list, chunks[1]);
+    render_main_list(f, app, chunks[1]);
 
     let status = create_status_bar(app);
     f.render_widget(status, chunks[2]);
@@ -82,74 +88,128 @@ fn create_header(app: &App) -> Paragraph {
         .alignment(ratatui::layout::Alignment::Center)
 }
 
-fn create_list(app: &App) -> List {
+fn render_main_list(f: &mut Frame, app: &mut App, area: Rect) {
     let color_scheme = app.config.get_color_scheme();
     let list_items: Vec<ListItem> = app.get_current_list_items()
         .into_iter()
-        .enumerate()
-        .map(|(i, name)| {
-            let is_selected = match app.view_level {
-                0 => i == app.selected_indices[0],
-                1 => i == app.selected_indices[1],
-                _ => false,
-            };
-
-            let mut spans = vec![];
-            if is_selected {
-                spans.push(Span::styled("> ", Style::default().fg(color_scheme.get_color("primary"))));
-            } else {
-                spans.push(Span::from("  "));
-            }
-
-            let style = if is_selected {
-                Style::default().fg(color_scheme.get_color("primary")).add_modifier(Modifier::BOLD)
-            } else if app.view_level == 1 && !name.starts_with("  ") { // Sub-category
+        .map(|name| {
+            let style = if app.view_level == 1 && !name.starts_with("  ") { // Sub-category
                 Style::default().fg(color_scheme.get_color("secondary")).add_modifier(Modifier::BOLD)
             } else { // Top-level category or tweak option
                 Style::default().fg(color_scheme.get_color("text_dim"))
             };
             let owned_name = name.trim().to_string();
-            spans.push(Span::styled(owned_name, style));
+            
+            let mut spans = vec![Span::styled(owned_name, style)];
             
             if app.applied_tweaks.contains(&name) {
-                spans.push(Span::styled(" ✓", Style::default().fg(color_scheme.get_color("success"))));
+                spans.push(Span::styled(" ✗", Style::default().fg(color_scheme.get_color("success"))));
             }
 
             ListItem::new(Line::from(spans))
         })
         .collect();
 
-    List::new(list_items)
+    let list = List::new(list_items)
+        .highlight_style(Style::default().fg(color_scheme.get_color("primary")).add_modifier(Modifier::BOLD))
+        .highlight_symbol("> ");
+
+    let state = if app.view_level == 0 {
+        &mut app.category_list_state
+    } else {
+        &mut app.tweak_list_state
+    };
+
+    f.render_stateful_widget(list, area, state);
 }
 
 fn create_status_bar(app: &App) -> Paragraph {
     let color_scheme = app.config.get_color_scheme();
-    let status_text = if let Some(message) = &app.status_message {
-        message.clone()
+    let (status_text, style) = if let Some(prompt) = &app.text_input_prompt {
+        (
+            format!("{} (Enter to confirm, Esc to cancel)\nInput: {}", prompt, app.input_buffer),
+            Style::default().fg(color_scheme.get_color("primary")).add_modifier(Modifier::BOLD),
+        )
     } else if let Some(confirmation) = &app.confirmation_message {
-        format!("{}\nInput: {}", confirmation, app.input_buffer)
+        (
+            format!("{}\nInput: {}", confirmation, app.input_buffer),
+            Style::default().fg(color_scheme.get_color("error")).add_modifier(Modifier::BOLD),
+        )
+    } else if let Some(message) = &app.status_message {
+        (message.clone(), Style::default().fg(color_scheme.get_color("primary")))
     } else {
-        match app.view_level {
-            0 => "Navigation: ↑↓ to select, → or Enter to view category, q to quit".to_string(),
-            1 => {
-                if app.viewing_sub_category.is_some() {
-                    "Navigation: ↑↓ to select, Enter to apply, ← to go back, q to quit".to_string()
-                } else {
-                    "Navigation: ↑↓ to select, → or Enter to view options, ← to go back, q to quit".to_string()
-                }
+        (
+            match app.view_level {
+                0 => "Navigation: ↑↓ to select, → or Enter to view category, q to quit".to_string(),
+                1 => {
+                    if app.viewing_sub_category.is_some() {
+                        "Navigation: ↑↓ to select, Enter to apply, ← to go back, q to quit".to_string()
+                    } else {
+                        "Navigation: ↑↓ to select, → or Enter to view options, ← to go back, q to quit".to_string()
+                    }
+                },
+                _ => "".to_string(),
             },
-            _ => "".to_string(),
-        }
-    };
-
-    let style = if app.confirmation_message.is_some() {
-        Style::default().fg(color_scheme.get_color("error")).add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(color_scheme.get_color("primary"))
+            Style::default().fg(color_scheme.get_color("primary")),
+        )
     };
 
     Paragraph::new(status_text)
         .style(style)
         .alignment(ratatui::layout::Alignment::Center)
         .wrap(Wrap { trim: true })
+}
+
+fn render_sokoban_game(f: &mut Frame, app: &mut App) {
+    let game = app.sokoban_game.as_mut().unwrap();
+    let color_scheme = app.config.get_color_scheme();
+
+    let title = if game.is_complete {
+        format!("Sokoban - Level Complete! ({} moves) - R to restart, Q to quit", game.moves)
+    } else {
+        format!("Sokoban - Moves: {} - WASD/Arrows to move, R to restart, Q to quit", game.moves)
+    };
+
+    let outer_block = Block::default()
+        .borders(Borders::ALL)
+        .title(title)
+        .style(Style::default().fg(color_scheme.get_color("primary")));
+    
+    let game_area = f.size();
+    f.render_widget(outer_block, game_area);
+
+    // Center the game board
+    let game_width = game.level[0].len() as u16 * 2;
+    let game_height = game.level.len() as u16;
+    let centered_rect = Rect {
+        x: game_area.x + (game_area.width.saturating_sub(game_width)) / 2,
+        y: game_area.y + (game_area.height.saturating_sub(game_height)) / 2,
+        width: game_width,
+        height: game_height,
+    };
+    
+    for (y, row) in game.level.iter().enumerate() {
+        for (x, tile) in row.iter().enumerate() {
+            let (mut char, mut style) = match tile {
+                Tile::Wall => ("🧱", Style::default()),
+                Tile::Floor => ("  ", Style::default()),
+                Tile::Target => ("🎯", Style::default()),
+            };
+
+            if game.player == (x, y) {
+                char = "🧑";
+                style = style.add_modifier(Modifier::BOLD);
+            } else if game.boxes.contains(&(x, y)) {
+                if let Tile::Target = game.level[y][x] {
+                    char = "✅"; // Box on a target
+                    style = style.add_modifier(Modifier::BOLD);
+                } else {
+                    char = "📦"; // Box on floor
+                }
+            }
+            
+            let rect = Rect::new(centered_rect.x + (x * 2) as u16, centered_rect.y + y as u16, 2, 1);
+            f.render_widget(Paragraph::new(char).style(style), rect);
+        }
+    }
 } 

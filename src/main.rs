@@ -129,15 +129,59 @@ fn run_app<B: Backend + std::io::Write>(terminal: &mut Terminal<B>, app: &mut Ap
             break;
         }
 
-        if event::poll(std::time::Duration::from_millis(100))? {
+        if event::poll(std::time::Duration::from_millis(50))? {
             match event::read()? {
                 Event::Key(key) => {
+                    if app.sokoban_game.is_some() {
+                        handle_sokoban_game(app, key.code)?;
+                        continue;
+                    }
                     if app.fullscreen_list.is_some() {
                         handle_fullscreen_list_nav(app, key.code, terminal, |t, cmd| run_interactive_command(t, cmd))?;
                         continue;
                     }
                     if app.fullscreen_output.is_some() {
-                        app.fullscreen_output = None;
+                        match key.code {
+                            KeyCode::Up => app.fullscreen_output_scroll = app.fullscreen_output_scroll.saturating_sub(1),
+                            KeyCode::Down => app.fullscreen_output_scroll = app.fullscreen_output_scroll.saturating_add(1),
+                            _ => {
+                                app.fullscreen_output = None;
+                                app.fullscreen_output_scroll = 0;
+                            }
+                        }
+                        continue;
+                    }
+                    if app.text_input_prompt.is_some() {
+                        match key.code {
+                            KeyCode::Char(c) => app.input_buffer.push(c),
+                            KeyCode::Backspace => { app.input_buffer.pop(); },
+                            KeyCode::Enter => {
+                                if let Some(template) = app.text_input_command_template.clone() {
+                                    let command = template.replace("{}", &app.input_buffer);
+                                    match utils::execute_command(&command, false) {
+                                        Ok(_) => {
+                                            app.status_message = Some("Successfully applied custom text.".to_string());
+                                            app.status_timer = 50;
+                                        }
+                                        Err(e) => {
+                                            app.status_message = Some(format!("Error: {}", e));
+                                            app.status_timer = 80;
+                                        }
+                                    }
+                                }
+                                app.text_input_prompt = None;
+                                app.text_input_command_template = None;
+                                app.input_buffer.clear();
+                            },
+                            KeyCode::Esc => {
+                                app.text_input_prompt = None;
+                                app.text_input_command_template = None;
+                                app.input_buffer.clear();
+                                app.status_message = Some("Action canceled.".to_string());
+                                app.status_timer = 50;
+                            },
+                            _ => {}
+                        }
                         continue;
                     }
                     if app.confirmation_message.is_some() {
@@ -202,37 +246,58 @@ fn handle_fullscreen_list_nav<B: Backend + std::io::Write>(
     terminal: &mut Terminal<B>,
     run_interactive: impl Fn(&mut Terminal<B>, &str) -> Result<()>,
 ) -> Result<()> {
-    match key_code {
-        KeyCode::Up => {
-            if let Some(selected) = app.fullscreen_list_state.selected() {
-                if selected > 0 {
-                    app.fullscreen_list_state.select(Some(selected - 1));
+    if let Some(list) = &app.fullscreen_list {
+        let count = list.len();
+        if count == 0 {
+            return Ok(());
+        }
+        let selected = app.fullscreen_list_state.selected().unwrap_or(0);
+
+        match key_code {
+            KeyCode::Up => {
+                let new_selected = if selected == 0 { count - 1 } else { selected - 1 };
+                app.fullscreen_list_state.select(Some(new_selected));
+            }
+            KeyCode::Down => {
+                let new_selected = (selected + 1) % count;
+                app.fullscreen_list_state.select(Some(new_selected));
+            }
+            KeyCode::Enter => {
+                if let (Some(list), Some(selected_index)) =
+                    (app.fullscreen_list.clone(), app.fullscreen_list_state.selected())
+                {
+                    let selected_item = &list[selected_index];
+                    let command = if app.fullscreen_list_title.contains("Outdated") {
+                        format!("brew upgrade {}", selected_item)
+                    } else {
+                        format!("brew info {}", selected_item)
+                    };
+                    app.fullscreen_list = None;
+                    run_interactive(terminal, &command)?;
                 }
             }
-        },
-        KeyCode::Down => {
-            if let (Some(selected), Some(list)) = (app.fullscreen_list_state.selected(), &app.fullscreen_list) {
-                if selected < list.len() - 1 {
-                    app.fullscreen_list_state.select(Some(selected + 1));
-                }
-            }
-        },
-        KeyCode::Enter => {
-            if let (Some(list), Some(selected_index)) = (app.fullscreen_list.clone(), app.fullscreen_list_state.selected()) {
-                let selected_item = &list[selected_index];
-                let command = if app.fullscreen_list_title.contains("Outdated") {
-                    format!("brew upgrade {}", selected_item)
-                } else {
-                    format!("brew info {}", selected_item)
-                };
+            KeyCode::Esc | KeyCode::Char('q') => {
                 app.fullscreen_list = None;
-                run_interactive(terminal, &command)?;
             }
-        },
-        KeyCode::Esc | KeyCode::Char('q') => {
-            app.fullscreen_list = None;
-        },
-        _ => {}
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+fn handle_sokoban_game(app: &mut App, key_code: KeyCode) -> Result<()> {
+    if let Some(game) = &mut app.sokoban_game {
+        match key_code {
+            KeyCode::Char('w') | KeyCode::Up => game.move_player(0, -1),
+            KeyCode::Char('s') | KeyCode::Down => game.move_player(0, 1),
+            KeyCode::Char('a') | KeyCode::Left => game.move_player(-1, 0),
+            KeyCode::Char('d') | KeyCode::Right => game.move_player(1, 0),
+            KeyCode::Char('r') => game.reset(),
+            KeyCode::Char('q') | KeyCode::Esc => {
+                app.sokoban_game = None;
+            }
+            _ => {}
+        }
     }
     Ok(())
 }

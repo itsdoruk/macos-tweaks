@@ -1,0 +1,138 @@
+.TH MACOS-TWEAKS 1 "December 2024" "macOS Tweaks" "User Commands"
+
+.SH NAME
+macos-tweaks \- A comprehensive macOS system management and optimization tool
+
+.SH SYNOPSIS
+.B macos-tweaks
+[\fB\-h\fR]
+[\fB\-\-help\fR]
+.br
+.B macos-tweaks list
+.br
+.B macos-tweaks apply
+[\fItweak-name\fR]
+.br
+.B macos-tweaks revert
+[\fItweak-name\fR]
+
+.SH DESCRIPTION
+.B macos-tweaks
+is a powerful TUI for managing and applying macOS system tweaks.
+It provides an intuitive interface for managing Dock settings, Finder preferences,
+system UI customizations, and more.
+
+.SH FEATURES
+.TP
+.B Dock Customization
+Configure Dock size, position, behavior, and spacers.
+.TP
+.B Finder Customization
+Customize Finder appearance and behavior.
+.TP
+.B System UI Customization
+Customize menu bar, screensaver, and keyboard settings.
+.TP
+.B Security & Privacy
+Configure Gatekeeper, firewall, and privacy settings.
+.TP
+.B Developer Tools
+Install developer tools and configure Git settings.
+.TP
+.B Performance Optimization
+Optimize system animations and manage system features.
+.TP
+.B Power Management
+Configure system and display sleep settings.
+.TP
+.B Network Settings
+Manage DNS and network interfaces.
+.TP
+.B System Optimization
+Clean caches, organize files, and run maintenance tasks.
+.TP
+.B Brew Management
+Update Homebrew, manage packages, and control analytics.
+.TP
+.B Sokoban Game
+Includes a classic Sokoban puzzle game for a bit of fun.
+
+.SH OPTIONS
+.TP
+.BR \-h ", " \-\-help
+Display help information and exit.
+
+.SH COMMANDS
+.TP
+.B list
+Lists all available tweaks that can be applied or reverted.
+.TP
+.B apply \fItweak-name\fR
+Applies a specific tweak by its name.
+.TP
+.B revert \fItweak-name\fR
+Reverts a tweak if a revert command is available.
+
+.SH CONFIGURATION
+The application uses a JSON configuration file for color scheme customization,
+located at ~/.config/macos-tweaks/config.json.
+
+.SH KEYBOARD SHORTCUTS
+.TP
+.B ↑/↓
+Navigate up and down lists.
+.TP
+.B ←/→ or Enter
+Navigate between categories and tweaks.
+.TP
+.B Enter
+Apply the selected tweak.
+.TP
+.B q
+Quit the application.
+
+.SH FILES
+.TP
+.B ~/.config/macos-tweaks/config.json
+Default configuration file.
+
+.SH EXAMPLES
+.TP
+.B Start the interactive TUI:
+macos-tweaks
+.TP
+.B List all available tweaks:
+macos-tweaks list
+.TP
+.B Apply a tweak from the command line:
+macos-tweaks apply "Show Hidden Files"
+
+.SH AUTHOR
+Written by Doruk Sarp Aydın.
+
+.SH SEE ALSO
+.BR brew (1),
+.BR pmset (8),
+.BR networksetup (8),
+.BR systemsetup (8)
+
+.SH NOTES
+This application requires appropriate permissions to modify system settings. 
+Some features may require administrator privileges or specific system permissions.
+
+For more information, visit the project repository or documentation.
+
+.SH UTILITIES
+The utilities section provides useful system tools:
+.TP
+.B System Information
+Get detailed system information including hardware, disk usage, memory, and processes
+.TP
+.B File Operations
+Create directories, find files, count files, and perform file operations
+.TP
+.B System Maintenance
+Clear caches, repair permissions, rebuild Spotlight index, and view system logs
+.TP
+.B Network Utilities
+Test connectivity, show network information, flush DNS, and check connections 
